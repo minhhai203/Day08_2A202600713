@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import unicodedata
 from textwrap import shorten
 from typing import Any
 
@@ -110,18 +111,48 @@ class RAGManager:
                 clean_history.append({"role": role, "content": content})
         return clean_history
 
+    def _normalize_followup_text(self, text: str) -> str:
+        normalized = unicodedata.normalize("NFKD", text.lower())
+        normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
     def _build_query(self, question: str, history: list[dict[str, str]]) -> str:
         question = question.strip()
         if not history:
             return question
 
-        followup_markers = ("nó", "vậy", "đó", "cái đó", "cái này", "phần đó", "tiếp", "thêm")
-        if len(question) < 18 or question.lower().startswith(followup_markers) or any(
-            marker in question.lower() for marker in followup_markers
-        ):
+        normalized_question = self._normalize_followup_text(question)
+        followup_markers = (
+            "no",
+            "vay",
+            "do",
+            "cai do",
+            "cai nay",
+            "phan do",
+            "tiep",
+            "them",
+            "cu the",
+            "giai thich them",
+            "noi ro",
+            "con",
+            "sao",
+        )
+        likely_follow_up = (
+            len(normalized_question) <= 48
+            or normalized_question.startswith(followup_markers)
+            or any(marker in normalized_question for marker in followup_markers)
+        )
+        if likely_follow_up:
             prior_user = [turn["content"] for turn in history if turn["role"] == "user"]
+            prior_assistant = [turn["content"] for turn in history if turn["role"] == "assistant"]
+            context_parts = []
             if prior_user:
-                return f"{question}\n\nNgữ cảnh trước đó: {prior_user[-1]}"
+                context_parts.append(f"Câu hỏi trước: {prior_user[-1]}")
+            if prior_assistant:
+                context_parts.append(f"Câu trả lời trước: {prior_assistant[-1]}")
+            if context_parts:
+                return f"{question}\n\nNgữ cảnh trước đó:\n" + "\n".join(context_parts)
         return question
 
     def _to_source_document(self, item: dict[str, Any]) -> SourceDocument:
@@ -155,7 +186,17 @@ class RAGManager:
             blocks.append(f"{header}\n{source.snippet or ''}")
         return "\n---\n".join(blocks)
 
-    def _call_openai(self, query: str, context: str) -> str | None:
+    def _format_history_context(self, history: list[dict[str, str]]) -> str:
+        if not history:
+            return ""
+        turns = history[-4:]
+        lines = []
+        for turn in turns:
+            role = "User" if turn["role"] == "user" else "Assistant"
+            lines.append(f"{role}: {turn['content']}")
+        return "\n".join(lines)
+
+    def _call_openai(self, query: str, context: str, history_context: str = "") -> str | None:
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not api_key:
             self._last_generation_mode = "extractive"
@@ -170,7 +211,10 @@ class RAGManager:
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": f"Context:\n{context}\n\nQuestion: {query}",
+                        "content": (
+                            f"Conversation history:\n{history_context or 'N/A'}\n\n"
+                            f"Context:\n{context}\n\nQuestion: {query}"
+                        ),
                     },
                 ],
                 temperature=TEMPERATURE,
@@ -207,7 +251,8 @@ class RAGManager:
 
     def _generate_answer(self, query: str, sources: list[SourceDocument], history: list[dict[str, str]]) -> str:
         context = self._format_context(sources)
-        answer = self._call_openai(query, context)
+        history_context = self._format_history_context(history)
+        answer = self._call_openai(query, context, history_context=history_context)
         if answer:
             return answer
         self._last_generation_mode = "extractive"
