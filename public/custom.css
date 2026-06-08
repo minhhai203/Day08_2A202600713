@@ -1,0 +1,69 @@
+/* Group chatbot visual shell */
+
+:root {
+  --group-bg: #f3f6fb;
+  --group-surface: #ffffff;
+  --group-border: #d9e2ef;
+  --group-text: #122033;
+  --group-accent: #1f6feb;
+  --group-muted: #5f6b7a;
+}
+
+body {
+  background: var(--group-bg);
+  color: var(--group-text);
+}
+
+[class*="header"],
+[class*="watermark"],
+[class*="chat"] {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+[class*="message"],
+[class*="message-content"] {
+  border-radius: 14px !important;
+}
+
+[class*="assistant-message"] .message-content {
+  border: 1px solid var(--group-border) !important;
+  background: var(--group-surface) !important;
+}
+
+[class*="user-message"] .message-content {
+  background: #eef4ff !important;
+  border: 1px solid #d6e4ff !important;
+}
+
+[class*="disclaimer"],
+[class*="footer"] {
+  color: var(--group-muted) !important;
+}
+
+#message-composer {
+  border: 1px solid var(--group-border) !important;
+  box-shadow: 0 8px 24px rgba(18, 32, 51, 0.06) !important;
+}
+
+img[alt="RAG Chatbot"] {
+  max-width: min(100%, 820px) !important;
+  width: 100% !important;
+  border-radius: 18px !important;
+  border: 1px solid var(--group-border) !important;
+  box-shadow: 0 12px 30px rgba(18, 32, 51, 0.08) !important;
+  margin: 2px 0 12px 0 !important;
+}
+
+[class*="message-content"] h1,
+[class*="message-content"] h2,
+[class*="message-content"] h3 {
+  letter-spacing: 0 !important;
+}
+
+[class*="message-content"] ul {
+  padding-left: 1.2rem !important;
+}
+
+[class*="message-content"] li {
+  margin: 0.2rem 0 !important;
+}

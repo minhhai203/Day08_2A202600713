@@ -40,7 +40,7 @@ group_project/
 │   ├── discovery_tools.py # List/read source docs
 │   ├── source_view.py     # Format citation/source panel
 │   └── memory_store.py    # Session/history helpers
-├── public/
+├── public/                # Runtime assets Chainlit serve từ root repo
 │   ├── custom.css         # Chỉnh giao diện Chainlit
 │   └── avatars/           # Avatar chat nếu cần
 ├── data/
@@ -112,7 +112,7 @@ group_project/
 | `group_project/agents/main_app.py` | Hải |
 | `group_project/agents/memory_store.py` | Hải |
 | `group_project/agents/source_view.py` | Hải |
-| `group_project/public/` | Hải |
+| `public/` | Hải |
 | `group_project/agents/orchestrator.py` | Thành |
 | `group_project/agents/rag_manager.py` | Thành |
 | `group_project/scripts/ingest_sources.py` | Thành |
