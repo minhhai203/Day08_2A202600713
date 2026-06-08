@@ -1,0 +1,21 @@
+/* Group chatbot visual shell */
+
+:root {
+  --group-bg: #f7f9fc;
+  --group-surface: #ffffff;
+  --group-border: #dbe3ee;
+  --group-text: #102033;
+  --group-accent: #1f6feb;
+}
+
+body {
+  background: var(--group-bg);
+  color: var(--group-text);
+}
+
+[class*="header"],
+[class*="watermark"],
+[class*="chat"] {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
