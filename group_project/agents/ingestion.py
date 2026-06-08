@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from chainlit.types import AskFileResponse
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from markitdown import MarkItDown
+from pypdf import PdfReader
 
 from .postgres_store import IngestResult, PostgresVectorStore
 
@@ -52,16 +56,71 @@ def _first_heading(text: str, fallback: str) -> str:
     return fallback
 
 
+def _extract_pdf_text(path: Path) -> str:
+    reader = PdfReader(str(path))
+    parts: list[str] = []
+    for page in reader.pages:
+        text = (page.extract_text() or "").strip()
+        if text:
+            parts.append(text)
+    return "\n\n".join(parts).strip()
+
+
+def _extract_pdf_text_with_ocr(path: Path) -> str:
+    pdftoppm = shutil.which("pdftoppm")
+    tesseract = shutil.which("tesseract")
+    if not pdftoppm or not tesseract:
+        return ""
+
+    with TemporaryDirectory() as tmpdir:
+        image_prefix = Path(tmpdir) / "page"
+        subprocess.run(
+            [pdftoppm, "-png", str(path), str(image_prefix)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        image_paths = sorted(Path(tmpdir).glob("page-*.png"))
+        if not image_paths:
+            single = Path(f"{image_prefix}.png")
+            if single.exists():
+                image_paths = [single]
+
+        texts: list[str] = []
+        for image_path in image_paths:
+            text = ""
+            for language in ("vie+eng", "eng"):
+                process = subprocess.run(
+                    [tesseract, str(image_path), "stdout", "-l", language, "--psm", "6"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                text = (process.stdout or "").strip()
+                if text:
+                    break
+            if text:
+                texts.append(text)
+        return "\n\n".join(texts).strip()
+
+
 def parse_uploaded_file(file: AskFileResponse) -> ParsedDocument:
     path = Path(str(_file_value(file, "path", "")))
     filename = path.name
     fallback_title = path.stem.replace("-", " ").replace("_", " ").strip().title()
 
+    extraction_method = "text"
     if path.suffix.lower() in {".md", ".txt"}:
         content = path.read_text(encoding="utf-8", errors="ignore").strip()
     else:
         result = MarkItDown(enable_plugins=False).convert_local(path)
         content = (result.markdown or "").strip()
+        if not content and path.suffix.lower() == ".pdf":
+            extraction_method = "pypdf"
+            content = _extract_pdf_text(path)
+        if not content and path.suffix.lower() == ".pdf":
+            extraction_method = "ocr"
+            content = _extract_pdf_text_with_ocr(path)
 
     if not content:
         raise RuntimeError(f"Không đọc được nội dung từ file {filename}.")
@@ -76,6 +135,7 @@ def parse_uploaded_file(file: AskFileResponse) -> ParsedDocument:
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
             "mime_type": _file_value(file, "type", ""),
             "size": _file_value(file, "size", 0),
+            "extraction_method": extraction_method,
         },
     )
 
