@@ -27,7 +27,7 @@ class ChatOrchestrator:
 
     def ingest_files(self, files: list[AskFileResponse]) -> list[IngestResult]:
         if self.get_data_mode() == "db":
-            return ingest_db_files(files, self.rag_manager._postgres_store)
+            return ingest_db_files(files, self.rag_manager._postgres_store)  # lazy property, safe
         return ingest_personal_files(files)
 
 

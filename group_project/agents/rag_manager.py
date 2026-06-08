@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 
 from .contracts import ChatResponse, Citation, SourceDocument
 from .corpus import search_documents
-from .postgres_store import PostgresVectorStore
 
 load_dotenv()
 
@@ -19,6 +18,9 @@ TOP_P = float(os.getenv("GROUP_RAG_TOP_P", "0.9"))
 TEMPERATURE = float(os.getenv("GROUP_RAG_TEMPERATURE", "0.25"))
 OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 DEFAULT_DATA_MODE = os.getenv("GROUP_RAG_DATA_MODE", "personal")
+MIN_SCORE = float(os.getenv("GROUP_RAG_MIN_SCORE", "0.05"))
+SNIPPET_WIDTH = int(os.getenv("GROUP_RAG_SNIPPET_WIDTH", "800"))
+HISTORY_CONTEXT_CHARS = int(os.getenv("GROUP_RAG_HISTORY_CHARS", "300"))
 
 SYSTEM_PROMPT = """Bạn là chatbot RAG cho chủ đề phòng chống ma túy và tin tức liên quan.
 Chỉ sử dụng thông tin trong context được cung cấp.
@@ -29,12 +31,18 @@ Không bịa số liệu, không bịa sự kiện, không tự suy diễn quá 
 
 
 class RAGManager:
-    """Backend stub for Thành to wire vector retrieval and answer generation."""
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.config = config or {}
-        self._last_generation_mode = "extractive"
-        self._postgres_store = PostgresVectorStore()
+        # Fix #3: lazy init — Postgres only created when actually needed
+        self._postgres_store_instance = None
+
+    @property
+    def _postgres_store(self):
+        if self._postgres_store_instance is None:
+            from .postgres_store import PostgresVectorStore
+            self._postgres_store_instance = PostgresVectorStore()
+        return self._postgres_store_instance
 
     def answer_chat(self, question: str, history: list[dict[str, str]] | None = None) -> ChatResponse:
         history = self._sanitize_history(history)
@@ -54,14 +62,14 @@ class RAGManager:
                 },
             )
 
-        answer = self._generate_answer(query, sources, history)
-        generation_mode = "openai" if self._last_generation_mode == "openai" else "extractive"
+        # Fix #2: _call_openai returns (answer, mode) — no mutable side-effect state
+        answer, generation_mode = self._generate_answer(query, sources, history)
         if not answer.strip():
             answer = self._extractive_answer(query, sources)
             generation_mode = "extractive"
 
         citations = self.build_citations(sources)
-        answer = self._append_citation_footer(answer, citations)
+        # Fix #1: no _append_citation_footer — UI renders citations separately
         return ChatResponse(
             answer=answer.strip(),
             citations=citations,
@@ -94,6 +102,11 @@ class RAGManager:
             ranked = self._postgres_store.search(question, top_k=top_k)
         else:
             ranked = search_documents(question, top_k=top_k)
+
+        # Fix #6: drop results below minimum relevance score
+        min_score = self.config.get("min_score", MIN_SCORE)
+        ranked = [r for r in ranked if (r.get("score") or 0.0) >= min_score]
+
         return [self._to_source_document(item) for item in ranked]
 
     def build_citations(self, sources: list[SourceDocument]) -> list[Citation]:
@@ -124,19 +137,8 @@ class RAGManager:
 
         normalized_question = self._normalize_followup_text(question)
         followup_markers = (
-            "no",
-            "vay",
-            "do",
-            "cai do",
-            "cai nay",
-            "phan do",
-            "tiep",
-            "them",
-            "cu the",
-            "giai thich them",
-            "noi ro",
-            "con",
-            "sao",
+            "no", "vay", "do", "cai do", "cai nay", "phan do",
+            "tiep", "them", "cu the", "giai thich them", "noi ro", "con", "sao",
         )
         likely_follow_up = (
             len(normalized_question) <= 48
@@ -150,7 +152,9 @@ class RAGManager:
             if prior_user:
                 context_parts.append(f"Câu hỏi trước: {prior_user[-1]}")
             if prior_assistant:
-                context_parts.append(f"Câu trả lời trước: {prior_assistant[-1]}")
+                # Fix #5: cap assistant content to avoid bloating the retrieval query
+                truncated = shorten(prior_assistant[-1], width=HISTORY_CONTEXT_CHARS, placeholder="...")
+                context_parts.append(f"Câu trả lời trước: {truncated}")
             if context_parts:
                 return f"{question}\n\nNgữ cảnh trước đó:\n" + "\n".join(context_parts)
         return question
@@ -163,19 +167,13 @@ class RAGManager:
             title=str(metadata.get("title") or metadata.get("citation_label") or source_id),
             source=str(metadata.get("source") or metadata.get("path") or ""),
             url=str(metadata.get("source_url") or metadata.get("url") or ""),
-            snippet=shorten(item.get("content", "").replace("\n", " "), width=240, placeholder="..."),
+            # Fix #4: wider snippet gives LLM more context
+            snippet=shorten(item.get("content", "").replace("\n", " "), width=SNIPPET_WIDTH, placeholder="..."),
             score=float(item.get("score", 0.0)) if item.get("score") is not None else None,
         )
 
     def _source_label(self, source: SourceDocument) -> str:
         return source.title or source.id
-
-    def _append_citation_footer(self, answer: str, citations: list[Citation]) -> str:
-        answer = answer.strip()
-        if not citations:
-            return answer
-        footer = "Nguồn: " + " | ".join(f"[{idx}] {citation.title}" for idx, citation in enumerate(citations, start=1))
-        return f"{answer}\n\n{footer}"
 
     def _format_context(self, sources: list[SourceDocument]) -> str:
         blocks = []
@@ -196,11 +194,11 @@ class RAGManager:
             lines.append(f"{role}: {turn['content']}")
         return "\n".join(lines)
 
-    def _call_openai(self, query: str, context: str, history_context: str = "") -> str | None:
+    def _call_openai(self, query: str, context: str, history_context: str = "") -> tuple[str | None, str]:
+        """Returns (answer_text, generation_mode). Never raises."""
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not api_key:
-            self._last_generation_mode = "extractive"
-            return None
+            return None, "extractive"
         try:
             from openai import OpenAI
 
@@ -220,11 +218,9 @@ class RAGManager:
                 temperature=TEMPERATURE,
                 top_p=TOP_P,
             )
-            self._last_generation_mode = "openai"
-            return response.choices[0].message.content or ""
+            return response.choices[0].message.content or "", "openai"
         except Exception:
-            self._last_generation_mode = "extractive"
-            return None
+            return None, "extractive"
 
     def _extractive_answer(self, query: str, sources: list[SourceDocument]) -> str:
         if not sources:
@@ -249,17 +245,17 @@ class RAGManager:
 
         return "\n\n".join(sections) if sections else "Tôi chưa tìm thấy nguồn phù hợp để xác minh câu hỏi này."
 
-    def _generate_answer(self, query: str, sources: list[SourceDocument], history: list[dict[str, str]]) -> str:
+    def _generate_answer(
+        self, query: str, sources: list[SourceDocument], history: list[dict[str, str]]
+    ) -> tuple[str, str]:
+        """Returns (answer_text, generation_mode)."""
         context = self._format_context(sources)
         history_context = self._format_history_context(history)
-        answer = self._call_openai(query, context, history_context=history_context)
+        answer, mode = self._call_openai(query, context, history_context=history_context)
         if answer:
-            return answer
-        self._last_generation_mode = "extractive"
-        answer = self._extractive_answer(query, sources)
-        if history and answer:
-            return answer
-        return answer
+            return answer, mode
+        extractive = self._extractive_answer(query, sources)
+        return extractive, "extractive"
 
 
 def build_rag_manager(config: dict[str, Any] | None = None) -> RAGManager:
