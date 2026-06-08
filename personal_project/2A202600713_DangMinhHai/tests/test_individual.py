@@ -16,9 +16,9 @@ from pathlib import Path
 # Project root
 PROJECT_DIR = Path(__file__).parent.parent
 DATA_DIR = PROJECT_DIR / "data"
-SRC_DIR = PROJECT_DIR / "src"
+TASKS_DIR = PROJECT_DIR / "tasks"
 
-# Add src to path
+# Add project root to path so `tasks.*` imports resolve
 sys.path.insert(0, str(PROJECT_DIR))
 
 
@@ -181,7 +181,7 @@ class TestTask4(unittest.TestCase):
 
     def _import_task4(self):
         try:
-            from src.task4_chunking_indexing import (
+            from tasks.task4_chunking_indexing import (
                 load_documents, chunk_documents, CHUNK_SIZE, CHUNK_OVERLAP
             )
             return load_documents, chunk_documents, CHUNK_SIZE, CHUNK_OVERLAP
@@ -247,7 +247,7 @@ class TestTask5(unittest.TestCase):
 
     def _import_task5(self):
         try:
-            from src.task5_semantic_search import semantic_search
+            from tasks.task5_semantic_search import semantic_search
             return semantic_search
         except (ImportError, NotImplementedError) as e:
             self.skipTest(f"Task 5 chưa implement: {e}")
@@ -305,7 +305,7 @@ class TestTask6(unittest.TestCase):
 
     def _import_task6(self):
         try:
-            from src.task6_lexical_search import lexical_search
+            from tasks.task6_lexical_search import lexical_search
             return lexical_search
         except (ImportError, NotImplementedError) as e:
             self.skipTest(f"Task 6 chưa implement: {e}")
@@ -367,7 +367,7 @@ class TestTask7(unittest.TestCase):
 
     def _import_task7(self):
         try:
-            from src.task7_reranking import rerank
+            from tasks.task7_reranking import rerank
             return rerank
         except (ImportError, NotImplementedError) as e:
             self.skipTest(f"Task 7 chưa implement: {e}")
@@ -423,7 +423,7 @@ class TestTask8(unittest.TestCase):
 
     def _import_task8(self):
         try:
-            from src.task8_pageindex_vectorless import pageindex_search
+            from tasks.task8_pageindex_vectorless import pageindex_search
             return pageindex_search
         except (ImportError, NotImplementedError) as e:
             self.skipTest(f"Task 8 chưa implement: {e}")
@@ -454,7 +454,7 @@ class TestTask9(unittest.TestCase):
 
     def _import_task9(self):
         try:
-            from src.task9_retrieval_pipeline import retrieve
+            from tasks.task9_retrieval_pipeline import retrieve
             return retrieve
         except (ImportError, NotImplementedError) as e:
             self.skipTest(f"Task 9 chưa implement: {e}")
@@ -513,7 +513,7 @@ class TestTask10(unittest.TestCase):
 
     def _import_task10(self):
         try:
-            from src.task10_generation import (
+            from tasks.task10_generation import (
                 generate_with_citation, reorder_for_llm, format_context
             )
             return generate_with_citation, reorder_for_llm, format_context
