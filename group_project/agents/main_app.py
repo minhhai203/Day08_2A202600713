@@ -15,7 +15,7 @@ from agents.source_view import format_citations, format_sources_sidebar
 
 APP_TITLE = "RAG Chatbot"
 APP_SUBTITLE = "Khung chat nhóm về phòng chống ma túy - sẵn sàng để cắm RAG pipeline."
-BANNER_PATH = "/public/rag-hero.gif"
+BANNER_PATH = "/public/chatbot_icon.png"
 
 QUICK_PROMPTS = [
     "Những dấu hiệu nào thường được nhắc đến trong tài liệu về phòng chống ma túy?",
