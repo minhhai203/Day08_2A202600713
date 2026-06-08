@@ -8,6 +8,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOTS = [
     REPO_ROOT / "group_project" / "data" / "source_docs",
+    REPO_ROOT / "group_project" / "data" / "user_uploads" / "personal",
     REPO_ROOT / "personal_project" / "2A202600713_DangMinhHai" / "data" / "standardized",
 ]
 
@@ -77,14 +78,20 @@ def _source_root_label(path: Path) -> str:
 
 
 def iter_source_files() -> list[Path]:
+    files: list[Path] = []
     for root in SOURCE_ROOTS:
         if not root.exists():
             continue
-        files = sorted(root.rglob("*.md"))
-        if not files:
+        files.extend(sorted(root.rglob("*.md")))
+    seen: set[str] = set()
+    deduped: list[Path] = []
+    for path in files:
+        key = str(path.resolve())
+        if key in seen:
             continue
-        return files
-    return []
+        seen.add(key)
+        deduped.append(path)
+    return deduped
 
 
 def load_documents() -> list[dict[str, Any]]:
