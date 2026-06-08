@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import unicodedata
 from textwrap import shorten
 from typing import Any
 
@@ -9,6 +10,7 @@ from dotenv import load_dotenv
 
 from .contracts import ChatResponse, Citation, SourceDocument
 from .corpus import search_documents
+from .postgres_store import PostgresVectorStore
 
 load_dotenv()
 
@@ -16,6 +18,7 @@ TOP_K = int(os.getenv("GROUP_RAG_TOP_K", "5"))
 TOP_P = float(os.getenv("GROUP_RAG_TOP_P", "0.9"))
 TEMPERATURE = float(os.getenv("GROUP_RAG_TEMPERATURE", "0.25"))
 OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
+DEFAULT_DATA_MODE = os.getenv("GROUP_RAG_DATA_MODE", "personal")
 
 SYSTEM_PROMPT = """Bạn là chatbot RAG cho chủ đề phòng chống ma túy và tin tức liên quan.
 Chỉ sử dụng thông tin trong context được cung cấp.
@@ -31,20 +34,23 @@ class RAGManager:
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.config = config or {}
         self._last_generation_mode = "extractive"
+        self._postgres_store = PostgresVectorStore()
 
     def answer_chat(self, question: str, history: list[dict[str, str]] | None = None) -> ChatResponse:
         history = self._sanitize_history(history)
         query = self._build_query(question, history)
         sources = self.retrieve_sources(query, top_k=self.config.get("top_k", TOP_K))
+        data_mode = self.get_data_mode()
         if not sources:
             return ChatResponse(
                 answer="Tôi chưa tìm thấy nguồn phù hợp để xác minh câu hỏi này.",
                 sources=[],
                 metadata={
                     "used_memory": bool(history),
-                    "retrieval_mode": "local-corpus",
+                    "retrieval_mode": f"{data_mode}-empty",
                     "generation_mode": "none",
                     "source_count": 0,
+                    "data_mode": data_mode,
                 },
             )
 
@@ -54,22 +60,28 @@ class RAGManager:
             answer = self._extractive_answer(query, sources)
             generation_mode = "extractive"
 
-        if "[" not in answer and sources:
-            answer = f"{answer}\n\n" + " ".join(f"[{self._source_label(source)}]" for source in sources[:2])
-
         citations = self.build_citations(sources)
+        answer = self._append_citation_footer(answer, citations)
         return ChatResponse(
             answer=answer.strip(),
             citations=citations,
             sources=sources,
             metadata={
                 "used_memory": bool(history),
-                "retrieval_mode": "local-corpus",
+                "retrieval_mode": "local-corpus" if data_mode == "personal" else "pgvector",
                 "generation_mode": generation_mode,
                 "source_count": len(sources),
                 "question_terms": len(re.findall(r"\b\w+\b", query.lower(), flags=re.UNICODE)),
+                "data_mode": data_mode,
             },
         )
+
+    def get_data_mode(self) -> str:
+        mode = str(self.config.get("data_mode") or DEFAULT_DATA_MODE).strip().lower()
+        return mode if mode in {"personal", "db"} else "personal"
+
+    def set_data_mode(self, mode: str) -> None:
+        self.config["data_mode"] = mode if mode in {"personal", "db"} else "personal"
 
     def retrieve_sources(
         self,
@@ -78,7 +90,10 @@ class RAGManager:
         history: list[dict[str, str]] | None = None,
     ) -> list[SourceDocument]:
         _ = history
-        ranked = search_documents(question, top_k=top_k)
+        if self.get_data_mode() == "db":
+            ranked = self._postgres_store.search(question, top_k=top_k)
+        else:
+            ranked = search_documents(question, top_k=top_k)
         return [self._to_source_document(item) for item in ranked]
 
     def build_citations(self, sources: list[SourceDocument]) -> list[Citation]:
@@ -96,18 +111,48 @@ class RAGManager:
                 clean_history.append({"role": role, "content": content})
         return clean_history
 
+    def _normalize_followup_text(self, text: str) -> str:
+        normalized = unicodedata.normalize("NFKD", text.lower())
+        normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
     def _build_query(self, question: str, history: list[dict[str, str]]) -> str:
         question = question.strip()
         if not history:
             return question
 
-        followup_markers = ("nó", "vậy", "đó", "cái đó", "cái này", "phần đó", "tiếp", "thêm")
-        if len(question) < 18 or question.lower().startswith(followup_markers) or any(
-            marker in question.lower() for marker in followup_markers
-        ):
+        normalized_question = self._normalize_followup_text(question)
+        followup_markers = (
+            "no",
+            "vay",
+            "do",
+            "cai do",
+            "cai nay",
+            "phan do",
+            "tiep",
+            "them",
+            "cu the",
+            "giai thich them",
+            "noi ro",
+            "con",
+            "sao",
+        )
+        likely_follow_up = (
+            len(normalized_question) <= 48
+            or normalized_question.startswith(followup_markers)
+            or any(marker in normalized_question for marker in followup_markers)
+        )
+        if likely_follow_up:
             prior_user = [turn["content"] for turn in history if turn["role"] == "user"]
+            prior_assistant = [turn["content"] for turn in history if turn["role"] == "assistant"]
+            context_parts = []
             if prior_user:
-                return f"{question}\n\nNgữ cảnh trước đó: {prior_user[-1]}"
+                context_parts.append(f"Câu hỏi trước: {prior_user[-1]}")
+            if prior_assistant:
+                context_parts.append(f"Câu trả lời trước: {prior_assistant[-1]}")
+            if context_parts:
+                return f"{question}\n\nNgữ cảnh trước đó:\n" + "\n".join(context_parts)
         return question
 
     def _to_source_document(self, item: dict[str, Any]) -> SourceDocument:
@@ -125,6 +170,13 @@ class RAGManager:
     def _source_label(self, source: SourceDocument) -> str:
         return source.title or source.id
 
+    def _append_citation_footer(self, answer: str, citations: list[Citation]) -> str:
+        answer = answer.strip()
+        if not citations:
+            return answer
+        footer = "Nguồn: " + " | ".join(f"[{idx}] {citation.title}" for idx, citation in enumerate(citations, start=1))
+        return f"{answer}\n\n{footer}"
+
     def _format_context(self, sources: list[SourceDocument]) -> str:
         blocks = []
         for idx, source in enumerate(sources, 1):
@@ -134,7 +186,17 @@ class RAGManager:
             blocks.append(f"{header}\n{source.snippet or ''}")
         return "\n---\n".join(blocks)
 
-    def _call_openai(self, query: str, context: str) -> str | None:
+    def _format_history_context(self, history: list[dict[str, str]]) -> str:
+        if not history:
+            return ""
+        turns = history[-4:]
+        lines = []
+        for turn in turns:
+            role = "User" if turn["role"] == "user" else "Assistant"
+            lines.append(f"{role}: {turn['content']}")
+        return "\n".join(lines)
+
+    def _call_openai(self, query: str, context: str, history_context: str = "") -> str | None:
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not api_key:
             self._last_generation_mode = "extractive"
@@ -149,7 +211,10 @@ class RAGManager:
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": f"Context:\n{context}\n\nQuestion: {query}",
+                        "content": (
+                            f"Conversation history:\n{history_context or 'N/A'}\n\n"
+                            f"Context:\n{context}\n\nQuestion: {query}"
+                        ),
                     },
                 ],
                 temperature=TEMPERATURE,
@@ -186,7 +251,8 @@ class RAGManager:
 
     def _generate_answer(self, query: str, sources: list[SourceDocument], history: list[dict[str, str]]) -> str:
         context = self._format_context(sources)
-        answer = self._call_openai(query, context)
+        history_context = self._format_history_context(history)
+        answer = self._call_openai(query, context, history_context=history_context)
         if answer:
             return answer
         self._last_generation_mode = "extractive"

@@ -77,3 +77,22 @@ def format_sources_sidebar(
             snippet = shorten(source.snippet.replace("\n", " "), width=220, placeholder="...")
             lines.append(f"- Snippet: {snippet}")
     return "\n".join(lines)
+
+
+def format_source_preview(source: SourceDocument, index: int) -> tuple[str, str]:
+    title = source.title or f"Source {index}"
+    lines = [f"## {title}"]
+    meta = []
+    if source.source:
+        meta.append(f"Path: `{source.source}`")
+    if source.score is not None:
+        meta.append(f"Score: `{source.score:.3f}`")
+    if source.url:
+        meta.append(f"[Open source]({source.url})")
+    if meta:
+        lines.append(" | ".join(meta))
+    if source.snippet:
+        snippet = shorten(source.snippet.replace("\n", " "), width=520, placeholder="...")
+        lines.append("")
+        lines.append(f"> {snippet}")
+    return (f"Source {index:02d}", "\n".join(lines))
