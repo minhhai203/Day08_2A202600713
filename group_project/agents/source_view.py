@@ -44,3 +44,36 @@ def format_sources_panel(sources: list[SourceDocument]) -> str:
         lines.append(f"#### Source {idx}")
         lines.append(format_source_card(source))
     return "\n\n".join(lines)
+
+
+def format_sources_sidebar(
+    sources: list[SourceDocument],
+    citations: list[Citation] | None = None,
+    retrieval_mode: str | None = None,
+    used_memory: bool | None = None,
+) -> str:
+    lines: list[str] = ["# Source Panel"]
+    if retrieval_mode:
+        lines.append(f"- Retrieval: {retrieval_mode}")
+    if used_memory is not None:
+        lines.append(f"- Memory: {'on' if used_memory else 'off'}")
+    if citations:
+        lines.append(f"- Citations: {len(citations)}")
+
+    if not sources:
+        lines.append("\n_No source documents available yet._")
+        return "\n".join(lines)
+
+    lines.append("\n## Top Sources")
+    for idx, source in enumerate(sources, start=1):
+        lines.append(f"### {idx}. {source.title}")
+        if source.source:
+            lines.append(f"- Source: {source.source}")
+        if source.score is not None:
+            lines.append(f"- Score: {source.score:.3f}")
+        if source.url:
+            lines.append(f"- Link: {source.url}")
+        if source.snippet:
+            snippet = shorten(source.snippet.replace("\n", " "), width=220, placeholder="...")
+            lines.append(f"- Snippet: {snippet}")
+    return "\n".join(lines)
