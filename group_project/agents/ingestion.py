@@ -31,6 +31,14 @@ class ParsedDocument:
     metadata: dict[str, Any] | None = None
 
 
+def _file_value(file: AskFileResponse, key: str, default: Any = None) -> Any:
+    if hasattr(file, key):
+        return getattr(file, key, default)
+    if isinstance(file, dict):
+        return file.get(key, default)
+    return default
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()
     return slug or "uploaded-document"
@@ -45,7 +53,7 @@ def _first_heading(text: str, fallback: str) -> str:
 
 
 def parse_uploaded_file(file: AskFileResponse) -> ParsedDocument:
-    path = Path(file["path"])
+    path = Path(str(_file_value(file, "path", "")))
     filename = path.name
     fallback_title = path.stem.replace("-", " ").replace("_", " ").strip().title()
 
@@ -66,8 +74,8 @@ def parse_uploaded_file(file: AskFileResponse) -> ParsedDocument:
         metadata={
             "uploaded_file": filename,
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
-            "mime_type": file.get("type", ""),
-            "size": file.get("size", 0),
+            "mime_type": _file_value(file, "type", ""),
+            "size": _file_value(file, "size", 0),
         },
     )
 
@@ -82,7 +90,7 @@ def ingest_personal_files(files: list[AskFileResponse]) -> list[IngestResult]:
     results: list[IngestResult] = []
     for file in files:
         document = parse_uploaded_file(file)
-        slug = _slugify(document.title or Path(file["name"]).stem)
+        slug = _slugify(document.title or Path(str(_file_value(file, "name", "upload"))).stem)
         output_path = PERSONAL_UPLOAD_ROOT / f"{slug}.md"
         output = (
             f"# {document.title}\n\n"
