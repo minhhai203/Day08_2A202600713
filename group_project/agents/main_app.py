@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from agents.memory_store import append_turn, get_history, get_value, reset_history, set_value
 from agents.orchestrator import build_orchestrator
 from agents.session_bridge import build_backend_history, format_session_overview
-from agents.source_view import format_citations, format_sources_panel
+from agents.source_view import format_citations, format_sources_sidebar
 
 
 APP_TITLE = "RAG Chatbot"
@@ -110,15 +110,32 @@ async def render_response(response) -> None:
     response_dict = response.to_dict()
     answer = response_dict.get("answer", "").strip()
     metadata = response_dict.get("metadata", {})
+    retrieval_mode = metadata.get("retrieval_mode")
+    used_memory = metadata.get("used_memory")
 
     if not answer:
         answer = "Khong co noi dung tra loi."
+
+    sidebar_text = format_sources_sidebar(
+        response.sources,
+        citations=response.citations,
+        retrieval_mode=retrieval_mode,
+        used_memory=used_memory,
+    )
 
     await cl.Message(
         content=answer,
         author="RAG Assistant",
         metadata=metadata,
         tags=["answer", "rag"],
+        elements=[
+            cl.Text(
+                name="Source Panel",
+                content=sidebar_text,
+                display="side",
+                language="markdown",
+            )
+        ],
     ).send()
 
     if response.citations:
@@ -130,7 +147,7 @@ async def render_response(response) -> None:
 
     if response.sources:
         await cl.Message(
-            content=format_sources_panel(response.sources),
+            content=f"**Sources** ready in the side panel ({len(response.sources)} docs).",
             author="RAG Assistant",
             tags=["sources"],
         ).send()
