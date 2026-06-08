@@ -9,6 +9,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from agents.memory_store import append_turn, get_history, get_value, reset_history, set_value
 from agents.orchestrator import build_orchestrator
+from agents.session_bridge import build_backend_history, format_session_overview
 from agents.source_view import format_citations, format_sources_panel
 
 
@@ -82,6 +83,11 @@ async def on_chat_start() -> None:
         actions=build_actions(),
         metadata={"surface": "welcome", "app": APP_TITLE},
     ).send()
+    await cl.Message(
+        content=format_session_overview(get_history()),
+        author="RAG Assistant",
+        tags=["session"],
+    ).send()
 
 
 @cl.action_callback("reset_chat")
@@ -132,7 +138,7 @@ async def render_response(response) -> None:
 
 async def handle_question(question: str, is_quick_prompt: bool = False) -> None:
     orchestrator = get_value("orchestrator") or build_orchestrator()
-    history = get_history()
+    history = build_backend_history(get_history())
     append_turn("user", question)
 
     if is_quick_prompt:
