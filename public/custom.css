@@ -47,14 +47,44 @@ body {
 
 img[alt="RAG Chatbot"] {
   display: block !important;
-  max-width: min(100%, 360px) !important;
-  width: 58% !important;
+  width: min(100%, 300px) !important;
+  max-width: 300px !important;
   min-width: 220px !important;
-  border-radius: 8px !important;
+  margin: 2px auto 14px !important;
+  border-radius: 18px !important;
   border: 1px solid var(--group-border) !important;
-  box-shadow: 0 10px 26px rgba(18, 32, 51, 0.08) !important;
-  margin: 2px 0 18px 0 !important;
-  background: #ffffff !important;
+  box-shadow: 0 12px 30px rgba(18, 32, 51, 0.08) !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%) !important;
+  animation: heroFloat 6s ease-in-out infinite, heroFadeIn 420ms ease-out both !important;
+  transform-origin: center top !important;
+}
+
+@keyframes heroFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-6px) scale(1.01);
+  }
+}
+
+@keyframes heroFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  img[alt="RAG Chatbot"] {
+    animation: none !important;
+  }
 }
 
 [class*="message-content"] h1,
