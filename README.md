@@ -21,27 +21,91 @@ Xây dựng một RAG pipeline thực tế, end-to-end, từ thu thập dữ li�
 ```
 day_08_rag_pipeline_v2/
 ├── README.md
-├── data/
-│   ├── landing/          ← Task 1 & 2: raw files (PDF, DOCX, HTML)
-│   └── standardized/     ← Task 3: converted markdown files
-├── src/
-│   ├── __init__.py
-│   ├── task1_collect_legal_docs.py
-│   ├── task2_crawl_news.py
-│   ├── task3_convert_markdown.py
-│   ├── task4_chunking_indexing.py
-│   ├── task5_semantic_search.py
-│   ├── task6_lexical_search.py
-│   ├── task7_reranking.py
-│   ├── task8_pageindex_vectorless.py
-│   ├── task9_retrieval_pipeline.py
-│   └── task10_generation.py
-├── notebooks/
-│   └── demo.ipynb         ← Notebook demo cho buổi trình bày
-├── group_project/
-│   └── README.md          ← Hướng dẫn bài tập nhóm
 ├── requirements.txt
-└── .env.example
+├── .env.example
+│
+├── personal_project/                          ← Bài cá nhân của từng thành viên
+│   ├── 2A202600560_HoangPhucQuan/
+│   │   ├── data/
+│   │   │   ├── landing/                 ← Task 1 & 2: raw files (PDF, DOCX, HTML)
+│   │   │   └── standardized/            ← Task 3: converted markdown files
+│   │   ├── src/                         ← Task 1-10 modules
+│   │   │   ├── task1_collect_legal_docs.py
+│   │   │   ├── task2_crawl_news.py
+│   │   │   ├── task3_convert_markdown.py
+│   │   │   ├── task4_chunking_indexing.py
+│   │   │   ├── task5_semantic_search.py
+│   │   │   ├── task6_lexical_search.py
+│   │   │   ├── task7_reranking.py
+│   │   │   ├── task8_pageindex_vectorless.py
+│   │   │   ├── task9_retrieval_pipeline.py
+│   │   │   └── task10_generation.py
+│   │   ├── tests/                       ← Unit tests cho từng task
+│   │   ├── requirements.txt
+│   │   └── .env.example
+│   │
+│   ├── 2A202600713_DangMinhHai/
+│   │   ├── data/
+│   │   │   ├── landing/
+│   │   │   └── standardized/
+│   │   ├── tasks/                       ← Task modules
+│   │   ├── tests/
+│   │   └── ...
+│   │
+│   ├── 2A202600838_NguyenDucThanh/
+│   │   ├── data/
+│   │   │   ├── landing/
+│   │   │   └── standardized/
+│   │   ├── src/
+│   │   ├── tests/
+│   │   └── ...
+│   │
+│   └── [Thành viên khác]/
+│       ├── data/
+│       ├── src/ (hoặc tasks/)
+│       └── tests/
+│
+├── group_project/                       ← Bài tập nhóm: RAG Chatbot + Evaluation
+│   ├── README.md                        ← Hướng dẫn, kiến trúc & phân công
+│   ├── requirements.txt
+│   ├── app.py / chainlit.py             ← Demo chatbot app
+│   │
+│   ├── data/
+│   │   └── source_docs/                 ← Tài liệu tích hợp từ các thành viên
+│   │       ├── legal/                   ← Markdown files từ Task 3
+│   │       └── news/
+│   │
+│   ├── agents/                          ← Custom agents cho RAG pipeline
+│   │   ├── retrieval_agent.py
+│   │   ├── generation_agent.py
+│   │   └── ...
+│   │
+│   ├── scripts/                         ← Scripts chạy pipeline
+│   │   ├── ingest_documents.py          ← Import & index documents
+│   │   ├── run_pipeline.py
+│   │   └── ...
+│   │
+│   ├── evaluation/                      ← Golden dataset + evaluation results
+│   │   ├── golden_dataset.json          ← ≥15 Q&A pairs
+│   │   ├── eval_pipeline.py             ← DeepEval / RAGAS / TruLens script
+│   │   └── results.md                   ← Kết quả evaluation + phân tích
+│   │
+│   ├── docs/                            ← Documentation
+│   │   ├── architecture.md
+│   │   └── api.md
+│   │
+│   ├── public/                          ← Static assets
+│   │   └── avatars/
+│   │
+│   └── bonus/                           ← Bonus features (nếu có)
+│
+├── public/                              ← Shared assets
+│
+└── [Auto-generated folders]             ← Cache & build artifacts
+    ├── .chainlit/                       ← Chainlit config
+    ├── .deepeval/                       ← DeepEval cache
+    ├── .pytest_cache/                   ← Pytest cache
+    └── .files/                          ← Temp files
 ```
 
 ---
